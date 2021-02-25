@@ -1,0 +1,276 @@
+---
+title: "AirFrance Business Case"
+author: 'Team #16'
+date: "12/15/2020"
+output: ioslides_presentation
+---
+
+```{r setup, include=FALSE}
+library(readxl)
+library(scales)
+library(tidyverse)
+library(ggplot2)
+library(plotly)
+AirFrance_df <- read_excel("AirFrance case.xls")
+
+Final_AirFrance_df <- na.omit(AirFrance_df)
+
+Final_AirFrance_df$`Publisher ID` <- NULL
+Final_AirFrance_df$`Keyword ID` <- NULL
+
+Final_AirFrance_df$Net_Rev <- Final_AirFrance_df$Amount - Final_AirFrance_df$`Total Cost`
+Final_AirFrance_df$ROA <- Final_AirFrance_df$Net_Rev / Final_AirFrance_df$`Total Cost`
+Final_AirFrance_df$Avg_Rev_Booking <- Final_AirFrance_df$Amount / Final_AirFrance_df$`Total Volume of Bookings`
+Final_AirFrance_df$Prob_of_Booking <- (Final_AirFrance_df$`Trans. Conv. %` * Final_AirFrance_df$`Engine Click Thru %` /10000)*100
+Final_AirFrance_df$Cost_Booking <- Final_AirFrance_df$`Total Cost` / Final_AirFrance_df$`Total Volume of Bookings`
+
+Final_AirFrance_df$`Match Type` <- as.factor(Final_AirFrance_df$`Match Type`)
+Final_AirFrance_df$`Bid Strategy` <- as.factor(Final_AirFrance_df$`Bid Strategy`)
+Final_AirFrance_df$Status <-as.factor(Final_AirFrance_df$Status)
+Final_AirFrance_df$`Publisher Name` <- as.factor(Final_AirFrance_df$`Publisher Name`)
+Final_AirFrance_df$`Keyword Group` <- as.factor(Final_AirFrance_df$`Keyword Group`)
+Final_AirFrance_df$Category <- as.factor(Final_AirFrance_df$Category)
+Final_AirFrance_df$Campaign <- as.factor(Final_AirFrance_df$Campaign)
+
+Final_AirFrance_df$publisher_numeric <- as.numeric(Final_AirFrance_df$`Publisher Name`)
+Final_AirFrance_df$match_numeric  <- as.numeric(Final_AirFrance_df$`Match Type`)
+Final_AirFrance_df$keyword_group_numeric <- as.numeric(Final_AirFrance_df$`Keyword Group`)
+Final_AirFrance_df$campaign_numeric <- as.numeric(Final_AirFrance_df$Campaign)
+
+for(i	in	1:nrow(Final_AirFrance_df)){
+  if(Final_AirFrance_df$Prob_of_Booking[i]	=="0"){
+    Final_AirFrance_df$Prob_of_Booking[i]	<- 0
+  }else{
+    Final_AirFrance_df$Prob_of_Booking[i]	<- 1
+  }
+}
+
+my_normal <- function(x){
+  my_min <- min(x, na.rm=TRUE)
+  my_max <- max(x, na.rm=TRUE)
+  normalized <- (x-my_min)/(my_max-my_min)
+  return(normalized)
+}
+
+Final_AirFrance_df$ROA_norm <- my_normal(x=Final_AirFrance_df$ROA)
+Final_AirFrance_df$Publisher_norm <- my_normal(x=Final_AirFrance_df$publisher_numeric)
+Final_AirFrance_df$Campaign_norm <- my_normal(x=Final_AirFrance_df$campaign_numeric)
+Final_AirFrance_df$Match_type_norm <- my_normal(x=Final_AirFrance_df$match_numeric)
+Final_AirFrance_df$Impressions_norm <- my_normal(x=Final_AirFrance_df$Impressions)
+Final_AirFrance_df$Engine_click_norm <- my_normal(x=Final_AirFrance_df$`Engine Click Thru %`)
+Final_AirFrance_df$Conversion_norm <- my_normal(x=Final_AirFrance_df$`Trans. Conv. %`)
+Final_AirFrance_df$Avg_booking_norm <- my_normal(x=Final_AirFrance_df$Avg_Rev_Booking)
+Final_AirFrance_df$Cost_click_norm <- my_normal(x=Final_AirFrance_df$`Avg. Cost per Click`)
+Final_AirFrance_df$Avg_pos_norm <- my_normal(x=Final_AirFrance_df$`Avg. Pos.`)
+Final_AirFrance_df$click_norm <- my_normal(x=Final_AirFrance_df$Clicks)
+Final_AirFrance_df$keyword_group_norm <- my_normal(x=Final_AirFrance_df$keyword_group_numeric)
+Final_AirFrance_df$Total_Bookings_norm <- my_normal(x=Final_AirFrance_df$`Total Volume of Bookings`)
+Final_AirFrance_df$Revenue_norm <- my_normal(x=Final_AirFrance_df$Net_Rev)
+Final_AirFrance_df$Click_Charges_norm <- my_normal(x=Final_AirFrance_df$`Click Charges`)
+Final_AirFrance_df$Cost_Booking_norm <- my_normal(x=Final_AirFrance_df$Cost_Booking)
+```
+
+## Problem Statement
+
+How to optimize the search engine marketing (SEM) for Air France
+
+## Requirements
+
+- Find the ideal SEM campaign to ensure the optimal amount of sales of tickets
+- Selection of appropriate keywords
+- Selection of efficient allocation of ad $ through search engines
+- Offer strategies for placement on the search results page for Internet Users
+
+## Results of Logistic Regression
+
+```{r logistic, echo = FALSE, include=TRUE, warning=FALSE}
+Airfrance_logit <- glm(Prob_of_Booking ~ Campaign_norm + 
+                         Impressions_norm + Avg_pos_norm, 
+                       data=Final_AirFrance_df,family="binomial")
+summary(Airfrance_logit)
+
+library(caret)
+library(e1071)
+
+my_prediction <- predict(Airfrance_logit, Final_AirFrance_df, type="response")
+
+confusionMatrix(data=as.factor(as.numeric(my_prediction>0.5)),
+                reference=as.factor(as.numeric(Final_AirFrance_df$Prob_of_Booking)))
+
+```
+
+## Plot of the performance of the model
+
+
+```{r prediction, echo=FALSE, include=TRUE, warning=FALSE}
+
+#We plot the prediction model
+library(ROCR)
+
+pred_val_logit <- prediction(my_prediction, Final_AirFrance_df$Prob_of_Booking)
+
+#Runs the confusion matrices for different values of p(p=0-1). Sensitivity analysis
+perf_logit <- performance(pred_val_logit, "tpr", "fpr")
+
+plot(perf_logit, col="blue")
+```
+
+## Decision Tree
+
+``` {r decision tree, echo=FALSE, include=TRUE, warning=FALSE}
+library(rpart)
+library(rpart.plot)
+my_Airfrance_tree <- rpart(Prob_of_Booking ~ Campaign_norm + Impressions_norm + Avg_pos_norm,
+                      data=Final_AirFrance_df,
+                      method="class", cp=0.01)
+
+rpart.plot(my_Airfrance_tree, type=1, extra=1,
+           box.palette = c("red", "turquoise"),
+           branch.lty=3, shadow.col = "gray")
+
+```
+
+## Plot Investment for each Publisher
+
+```{r sum data, echo=FALSE, include=FALSE, warning=FALSE}
+
+sum_data_Airfrance <- Final_AirFrance_df %>% group_by(`Publisher Name`) %>% summarise(Total_Bookings=sum(`Total Volume of Bookings`), Revenue=sum(Net_Rev),
+                                                                                      Click_Charges=sum(`Click Charges`), roa=sum(ROA), Prob_Booking=sum(Prob_of_Booking),
+                                                                                      Cost_Book=sum(Cost_Booking), Cost_click=sum(`Avg. Cost per Click`), Rev_Booking=sum(Avg_Rev_Booking),
+                                                                                      Click_rate=sum(`Engine Click Thru %`), Conversion_rate=sum(`Trans. Conv. %`),na.rm=TRUE)
+
+```
+```{r plot, echo=FALSE, include=TRUE, warning=FALSE}
+library(ggplot2)
+plot1 <- plot_ly(type = "scatter",
+                 sum_data_Airfrance, 
+                 x = ~sum_data_Airfrance$Prob_Booking, 
+                 y = ~sum_data_Airfrance$Cost_click,
+                 text = ~paste("Publisher: ", rownames(sum_data_Airfrance)),
+                 mode = "markers",
+                 size = sum_data_Airfrance$Prob_Booking,
+                 sizes = c(10,100), # Change to make bubbles bigger
+                 marker = list(opacity = 1, sizemode = "diameter"),
+                 color = ~sum_data_Airfrance$`Publisher Name`)
+
+plot1 <- plot1 %>% layout(title = "Investment per Publisher",
+                          xaxis = list(title = "Probability of Booking per Publisher",
+                                       gridcolor = "light grey"),
+                          yaxis = list(title = "Average Cost per Click per Publisher",
+                                       gridcolor = "light grey"),
+                          showlegend = TRUE,
+                          paper_bgcolor = "white",
+                          plot_bgcolor = "white")
+
+plot1
+```
+
+## Plot Efficiency of each Publisher
+
+
+```{r plot2, echo=FALSE, include=TRUE, warning=FALSE}
+library(ggplot2)
+plot2 <- plot_ly(type = "scatter",
+                 sum_data_Airfrance, 
+                 x = ~sum_data_Airfrance$Click_rate, 
+                 y = ~sum_data_Airfrance$Conversion_rate,
+                 text = ~paste("Publisher: ", rownames(sum_data_Airfrance)),
+                 mode = "markers",
+                 size = sum_data_Airfrance$Click_rate,
+                 sizes = c(10,100), # Change to make bubbles bigger
+                 marker = list(opacity = 1, sizemode = "diameter"),
+                 color = ~sum_data_Airfrance$`Publisher Name`)
+
+plot2 <- plot2 %>% layout(title = "Efficiency of each Publisher",
+                          xaxis = list(title = "Click thru Rate",
+                                       gridcolor = "light grey"),
+                          yaxis = list(title = "Conversion Rate",
+                                       gridcolor = "light grey"),
+                          showlegend = TRUE,
+                          paper_bgcolor = "white",
+                          plot_bgcolor = "white")
+
+plot2
+```
+
+
+## Plot Impressions
+
+```{r plot3, echo=FALSE, include=TRUE, warning=FALSE}
+
+Final_AirFrance_df$`Impressions/Booking` <- round(log(Final_AirFrance_df$`Impressions` / Final_AirFrance_df$`Total Volume of Bookings`), digits = 2)
+
+ggplot(Final_AirFrance_df,aes(x=Final_AirFrance_df$`Publisher Name`, y= Final_AirFrance_df$`Impressions/Booking`,fill=Final_AirFrance_df$`Publisher Name`)) + 
+  geom_boxplot() 
+
+```
+
+
+
+## Plot Campaign
+
+
+```{r plot4, echo=FALSE, include=TRUE, warning=FALSE}
+Final_AirFrance_df$`Impressions/Booking_log` <- round(log(Final_AirFrance_df$`Impressions` / Final_AirFrance_df$`Total Volume of Bookings`), digits = 2)
+ggplot(Final_AirFrance_df,aes(x=`Campaign`, y= `Impressions/Booking_log`,fill=`Campaign`)) + 
+  geom_boxplot() +
+  geom_hline(yintercept=7, linetype="dashed", color = "red") +
+  theme(axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+```
+
+
+## Plot Match Type
+
+
+```{r plot 5, echo=FALSE, include=TRUE, warning=FALSE}
+x <- ggplot(Final_AirFrance_df, aes(x=`Publisher Name`, y=`Trans. Conv. %`, group=`Match Type`)) +
+  geom_point(aes(color=`Match Type`, size=`Match Type`), alpha=0.4)
+ggplotly(x)
+```
+
+## Plot Revenue Comparison - Publishers vs Kayak
+
+```{r Kayak, echo=FALSE, include=TRUE, warning=FALSE}
+Kayak_Airfrance_Revenue <- ggplot() +
+  geom_point(data=sum_data_Airfrance, aes(x=`Publisher Name`, y=`Revenue`), color="blue") +
+  geom_point(data= NULL, aes(x="Kayak", y=230126.86), color="orange") +
+  geom_hline(yintercept = mean(sum_data_Airfrance$Revenue), color="red")
+
+ggplotly(Kayak_Airfrance_Revenue)
+```
+
+## Plot Booking comparison - Publishers vs Kayak
+
+```{r plot kayak2, echo=FALSE, include=TRUE, warning=FALSE}
+
+Kayak_Airfrance_Bookings <- ggplot() +
+  geom_point(data=sum_data_Airfrance, aes(x=`Publisher Name`, y=`Total_Bookings`), color="blue") +
+  geom_point(data= NULL, aes(x="Kayak", y=208), color="orange") +
+  geom_hline(yintercept = mean(sum_data_Airfrance$Total_Bookings), color="red")
+
+ggplotly(Kayak_Airfrance_Bookings)
+
+```
+
+## Conclusions & Recommendations
+
+-Reduce Ad spending budget on Yahoo & MSN
+
+-Invest more in metasearch websites like Kayak
+
+-Focus on the high performing campaigns like Air France Global & Western Europe destinations, reduce geo-targeted US cities campaigns
+
+-Broad keyword match type results in higher transaction conversion percentage
+
+
+
+
+
+
+
+
+
+
+
